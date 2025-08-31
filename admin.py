@@ -28,11 +28,11 @@ except gspread.SpreadsheetNotFound:
     st.error(f"La feuille {PLAYERS_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec le compte service.")
     st.stop()  # Stoppe l'exécution
 
-try:
-    sheet_history = client.open(HISTORY_SHEET_NAME).sheet1
-except gspread.SpreadsheetNotFound:
-    st.error(f"La feuille {HISTORY_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec le compte service.")
-    st.stop()  # Stoppe l'exécution
+#try:
+#    sheet_history = client.open(HISTORY_SHEET_NAME).sheet1
+#except gspread.SpreadsheetNotFound:
+#    st.error(f"La feuille {HISTORY_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec #le compte service.")
+#    st.stop()  # Stoppe l'exécution
 
 # --------------------------
 # FONCTIONS UTILITAIRES
