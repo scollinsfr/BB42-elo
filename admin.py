@@ -5,41 +5,29 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime
 
-# --------------------------
-# CONFIGURATION GOOGLE SHEETS
-# --------------------------
-
-# Charger credentials depuis Streamlit Secrets
+# --- Connexion Google Sheets via secret ---
 creds_json = st.secrets["GOOGLE_CREDS_JSON"]
 creds_dict = json.loads(creds_json)
+scope = ["https://spreadsheets.google.com/feeds",'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-client = gspread.service_account_from_dict(creds_dict, scopes=scope)
+# Feuilles
+sheet = client.open("BadmintonElo")
+ws_joueurs = sheet.worksheet("Joueurs")
+ws_historique = sheet.worksheet("Historique")
 
-# Noms des feuilles
-PLAYERS_SHEET_NAME = "BadmintonElo"   # Feuille joueurs
-HISTORY_SHEET_NAME = "Historique"     # Feuille historique
+# --- Charger joueurs ---
+df_joueurs = pd.DataFrame(ws_joueurs.get_all_records())
+df_matches = pd.DataFrame(ws_historique.get_all_records())
 
-# Charger ou créer feuilles
-try:
-    sheet_players = client.open(PLAYERS_SHEET_NAME).sheet1
-except gspread.SpreadsheetNotFound:
-    # Créer une nouvelle feuille si non existante
-    st.error(f"La feuille {PLAYERS_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec le compte service.")
-    st.stop()  # Stoppe l'exécution
-
-#try:
-#    sheet_history = client.open(HISTORY_SHEET_NAME).sheet1
-#except gspread.SpreadsheetNotFound:
-#    st.error(f"La feuille {HISTORY_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec #le compte service.")
-#    st.stop()  # Stoppe l'exécution
 
 # --------------------------
 # FONCTIONS UTILITAIRES
 # --------------------------
 
 def load_players():
-    values = sheet_players.get_all_values()
+    values = ws_joueurs.get_all_values()
     df = pd.DataFrame(values[1:], columns=values[0])
     # Convertir les colonnes ELO en int
     for col in ["elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"]:
@@ -47,10 +35,10 @@ def load_players():
     return df
 
 def save_players(df):
-    sheet_players.clear()
-    sheet_players.append_row(df.columns.tolist())
+    ws_joueurs.clear()
+    ws_joueurs.append_row(df.columns.tolist())
     for row in df.values.tolist():
-        sheet_players.append_row(row)
+        ws_joueurs.append_row(row)
 
 def add_player(name, sexe):
     df = load_players()
@@ -98,7 +86,7 @@ else:
     st.info("Aucun joueur disponible pour suppression")
 
 st.header("Historique des matchs")
-values = sheet_history.get_all_values()
+values = ws_historique.get_all_values()
 if len(values) > 1:
     df_hist = pd.DataFrame(values[1:], columns=values[0])
     st.dataframe(df_hist)
