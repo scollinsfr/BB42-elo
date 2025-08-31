@@ -25,14 +25,14 @@ try:
     sheet_players = client.open(PLAYERS_SHEET_NAME).sheet1
 except gspread.SpreadsheetNotFound:
     # Créer une nouvelle feuille si non existante
-    sheet_players = client.create(PLAYERS_SHEET_NAME).sheet1
-    sheet_players.append_row(["Nom", "Sexe", "elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"])
+    st.error(f"La feuille {PLAYERS_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec le compte service.")
+    st.stop()  # Stoppe l'exécution
 
 try:
     sheet_history = client.open(HISTORY_SHEET_NAME).sheet1
 except gspread.SpreadsheetNotFound:
-    sheet_history = client.create(HISTORY_SHEET_NAME).sheet1
-    sheet_history.append_row(["Date", "TypeMatch", "Equipe1", "Equipe2", "Gagnant", "ELOAvant", "ELOApres"])
+    st.error(f"La feuille {HISTORY_SHEET_NAME} n'existe pas. Créez-la et partagez-la avec le compte service.")
+    st.stop()  # Stoppe l'exécution
 
 # --------------------------
 # FONCTIONS UTILITAIRES
