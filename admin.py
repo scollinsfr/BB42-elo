@@ -1,57 +1,53 @@
 import streamlit as st
 import pandas as pd
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import json
+from datetime import datetime
 
-# Fichiers CSV dans le Drive
-BASE_PATH = "/content/drive/MyDrive/badminton_elo"
-PLAYERS_FILE = os.path.join(BASE_PATH, "joueurs.csv")
-MATCHES_FILE = os.path.join(BASE_PATH, "historique.csv")
+# --- Connexion Google Sheets via secret ---
+creds_json = st.secrets["GOOGLE_CREDS_JSON"]
+creds_dict = json.loads(creds_json)
+scope = ["https://spreadsheets.google.com/feeds",'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
 
-# Initialisation
-if not os.path.exists(PLAYERS_FILE):
-    pd.DataFrame(columns=["Nom", "Elo"]).to_csv(PLAYERS_FILE, index=False)
-if not os.path.exists(MATCHES_FILE):
-    pd.DataFrame(columns=["Joueur1", "Joueur2", "Score1", "Score2"]).to_csv(MATCHES_FILE, index=False)
+# Feuilles
+sheet = client.open("BadmintonElo")
+ws_joueurs = sheet.worksheet("Joueurs")
+ws_historique = sheet.worksheet("Historique")
 
-# Lecture
-joueurs = pd.read_csv(PLAYERS_FILE)
-matches = pd.read_csv(MATCHES_FILE)
+# --- Charger joueurs ---
+df_joueurs = pd.DataFrame(ws_joueurs.get_all_records())
 
-st.title("🏸 Administration Badminton (ELO)")
+st.title("Administration Badminton ELO")
 
-# --- Ajouter un joueur ---
-st.subheader("Ajouter un joueur")
-nouveau_nom = st.text_input("Nom du joueur")
+# --- Ajouter joueur ---
+st.header("Ajouter un joueur")
+nom = st.text_input("Nom")
+sexe = st.selectbox("Sexe", ["M", "F"])
 if st.button("Ajouter joueur"):
-    if nouveau_nom and nouveau_nom not in joueurs["Nom"].values:
-        joueurs = joueurs._append({"Nom": nouveau_nom, "Elo": 1000}, ignore_index=True)
-        joueurs.to_csv(PLAYERS_FILE, index=False)
-        st.success(f"{nouveau_nom} ajouté avec succès !")
-        st.rerun()
+    if nom in df_joueurs['Nom'].values:
+        st.error("Ce joueur existe déjà")
+    else:
+        new_row = [nom, sexe, 1000, 1000, 1000, 1000, 1000]
+        ws_joueurs.append_row(new_row)
+        st.success(f"Joueur {nom} ajouté")
 
-# --- Supprimer un joueur ---
-st.subheader("Supprimer un joueur")
-if not joueurs.empty:
-    joueur_suppr = st.selectbox("Choisir un joueur à supprimer", joueurs["Nom"])
-    if st.button("Supprimer joueur"):
-        joueurs = joueurs[joueurs["Nom"] != joueur_suppr]
-        joueurs.to_csv(PLAYERS_FILE, index=False)
-        st.warning(f"{joueur_suppr} supprimé.")
-        st.rerun()
+# --- Supprimer joueur ---
+st.header("Supprimer un joueur")
+nom_suppr = st.selectbox("Choisir un joueur", df_joueurs['Nom'].tolist())
+if st.button("Supprimer joueur"):
+    idx = df_joueurs.index[df_joueurs['Nom'] == nom_suppr][0] + 2  # +2 car gspread index base 1 + header
+    ws_joueurs.delete_rows(idx)
+    st.success(f"Joueur {nom_suppr} supprimé")
 
-# --- Supprimer un match ---
-st.subheader("Supprimer un match")
-if not matches.empty:
-    match_suppr = st.selectbox("Choisir un match à supprimer", matches.index)
-    if st.button("Supprimer match"):
-        matches = matches.drop(match_suppr)
-        matches.to_csv(MATCHES_FILE, index=False)
-        st.warning("Match supprimé.")
-        st.rerun()
-
-# --- Voir les données ---
-st.subheader("Classement actuel")
-st.dataframe(joueurs)
-
-st.subheader("Historique des matchs")
-st.dataframe(matches)
+# --- Annuler dernier match ---
+st.header("Annuler dernier match")
+if st.button("Annuler dernière saisie"):
+    hist = ws_historique.get_all_values()
+    if len(hist) <= 1:
+        st.error("Aucun match à annuler")
+    else:
+        ws_historique.delete_rows(len(hist))
+        st.success("Dernière saisie annulée")
