@@ -17,15 +17,10 @@ sheet = client.open("BadmintonElo")
 ws_joueurs = sheet.worksheet("Joueurs")
 ws_historique = sheet.worksheet("Historique")
 
-
-# --------------------------
-# FONCTIONS UTILITAIRES
-# --------------------------
-
+# --- Charger joueurs ---
 def load_players():
     values = ws_joueurs.get_all_values()
     df = pd.DataFrame(values[1:], columns=values[0])
-    # Convertir les colonnes ELO en int
     for col in ["elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"]:
         df[col] = df[col].astype(int)
     return df
@@ -36,15 +31,16 @@ def save_players(df):
     for row in df.values.tolist():
         ws_joueurs.append_row(row)
 
-def update_elo(player, column, new_elo):
-    df = load_players()
-    df.loc[df["Nom"] == player, column] = new_elo
-    save_players(df)
+# --- Fonctions ELO ---
+def calculate_elo(winner_elo, loser_elo, k=32):
+    expected_win = 1 / (1 + 10 ** ((loser_elo - winner_elo) / 400))
+    new_winner_elo = round(winner_elo + k * (1 - expected_win))
+    new_loser_elo = round(loser_elo - k * (1 - expected_win))
+    return new_winner_elo, new_loser_elo
 
-def add_match(date, type_match, joueurs, score, elo_avant, elo_apres):
-    row = [date, type_match, joueurs, score, elo_avant, elo_apres]
+def add_match(date, type_match, winners, losers, elo_avant, elo_apres):
+    row = [date, type_match, winners, losers, elo_avant, elo_apres]
     ws_historique.append_row(row)
-
 
 # --------------------------
 # STREAMLIT UI
@@ -75,7 +71,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Logo (même emplacement que admin.py)
+# Logo
 logo_url = ""  # exemple: "https://tonsite.com/logo.png"
 if logo_url:
     st.image(logo_url, width=200)
@@ -85,27 +81,50 @@ st.title("🏸 Résultats Badminton ELO")
 # Charger joueurs
 df_joueurs = load_players()
 
-# Saisie d’un match
+# Saisie match
 st.header("➕ Enregistrer un match")
 
 with st.form("match_form"):
     type_match = st.selectbox("Type de match", ["SH", "SD", "DH", "DD", "DM"])
-    joueurs = st.multiselect("Joueurs", df_joueurs["Nom"].tolist(), max_selections=4)
-    score = st.text_input("Score (ex: 21-15 / 19-21 / 21-18)")
+    winners = st.multiselect("Équipe gagnante", df_joueurs["Nom"].tolist(), max_selections=2)
+    losers = st.multiselect("Équipe perdante", df_joueurs["Nom"].tolist(), max_selections=2)
     submitted = st.form_submit_button("Enregistrer le match")
 
     if submitted:
-        if len(joueurs) < 2:
-            st.error("⚠️ Sélectionne au moins 2 joueurs")
-        elif not score.strip():
-            st.error("⚠️ Le score est obligatoire")
+        if len(winners) < 1 or len(losers) < 1:
+            st.error("⚠️ Sélectionne au moins 1 joueur dans chaque équipe")
         else:
             date = datetime.now().strftime("%Y-%m-%d %H:%M")
-            # Placeholder pour les elos (à calculer selon ton système)
-            elo_avant = "TODO"
-            elo_apres = "TODO"
-            add_match(date, type_match, ", ".join(joueurs), score, elo_avant, elo_apres)
-            st.success("✅ Match enregistré !")
+
+            # Identifier la colonne ELO
+            col_elo = "elo_" + type_match
+
+            # Moyenne des ELO avant
+            elo_winners_avant = df_joueurs.loc[df_joueurs["Nom"].isin(winners), col_elo].mean()
+            elo_losers_avant = df_joueurs.loc[df_joueurs["Nom"].isin(losers), col_elo].mean()
+
+            # Calcul nouveaux ELO
+            new_winner_elo, new_loser_elo = calculate_elo(elo_winners_avant, elo_losers_avant)
+
+            # Mise à jour des joueurs
+            for p in winners:
+                df_joueurs.loc[df_joueurs["Nom"] == p, col_elo] = new_winner_elo
+            for p in losers:
+                df_joueurs.loc[df_joueurs["Nom"] == p, col_elo] = new_loser_elo
+
+            save_players(df_joueurs)
+
+            # Enregistrer match dans l’historique
+            add_match(
+                date,
+                type_match,
+                ", ".join(winners),
+                ", ".join(losers),
+                f"{int(elo_winners_avant)}/{int(elo_losers_avant)}",
+                f"{new_winner_elo}/{new_loser_elo}"
+            )
+
+            st.success("✅ Match enregistré et ELO mis à jour !")
 
 # Historique
 st.header("📜 Historique des matchs")
