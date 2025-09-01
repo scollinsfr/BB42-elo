@@ -5,8 +5,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime
 
-K_FACTOR = 32
-
 # --- Connexion Google Sheets via secret ---
 creds_json = st.secrets["GOOGLE_CREDS_JSON"]
 creds_dict = json.loads(creds_json)
@@ -19,53 +17,101 @@ sheet = client.open("BadmintonElo")
 ws_joueurs = sheet.worksheet("Joueurs")
 ws_historique = sheet.worksheet("Historique")
 
-# --- Charger joueurs ---
-df_joueurs = pd.DataFrame(ws_joueurs.get_all_records())
 
-st.title("Saisie des matchs Badminton ELO")
+# --------------------------
+# FONCTIONS UTILITAIRES
+# --------------------------
 
-# --- Sélection du match ---
-joueurs = df_joueurs['Nom'].tolist()
-st.header("Équipe 1")
-equipe1 = st.multiselect("Choisir les joueurs équipe 1", joueurs)
-st.header("Équipe 2")
-equipe2 = st.multiselect("Choisir les joueurs équipe 2", [j for j in joueurs if j not in equipe1])
+def load_players():
+    values = ws_joueurs.get_all_values()
+    df = pd.DataFrame(values[1:], columns=values[0])
+    # Convertir les colonnes ELO en int
+    for col in ["elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"]:
+        df[col] = df[col].astype(int)
+    return df
 
-type_match = st.selectbox("Type de match", ["SH", "SD", "DH", "DD", "DM"])
-gagnant = st.selectbox("Équipe gagnante", ["Équipe 1", "Équipe 2"])
+def save_players(df):
+    ws_joueurs.clear()
+    ws_joueurs.append_row(df.columns.tolist())
+    for row in df.values.tolist():
+        ws_joueurs.append_row(row)
 
-# --- Fonctions ELO ---
-def calcul_elo(e1, e2, score1):
-    exp1 = 1 / (1 + 10 ** ((e2 - e1) / 400))
-    exp2 = 1 - exp1
-    new_e1 = e1 + K_FACTOR * (score1 - exp1)
-    new_e2 = e2 + K_FACTOR * ((1 - score1) - exp2)
-    return round(new_e1), round(new_e2)
+def update_elo(player, column, new_elo):
+    df = load_players()
+    df.loc[df["Nom"] == player, column] = new_elo
+    save_players(df)
 
-def appliquer_elo(j1_names, j2_names, type_match):
-    e1 = df_joueurs.loc[df_joueurs['Nom'].isin(j1_names), f'elo_{type_match}'].mean()
-    e2 = df_joueurs.loc[df_joueurs['Nom'].isin(j2_names), f'elo_{type_match}'].mean()
-    score1 = 1 if gagnant == "Équipe 1" else 0
-    new_e1, new_e2 = calcul_elo(e1, e2, score1)
-    delta1 = new_e1 - e1
-    delta2 = new_e2 - e2
-    for j in j1_names:
-        idx = df_joueurs.index[df_joueurs['Nom']==j][0]+2
-        ws_joueurs.update_cell(idx, df_joueurs.columns.get_loc(f'elo_{type_match}')+1, int(df_joueurs.loc[df_joueurs['Nom']==j, f'elo_{type_match}'].values[0]+delta1))
-    for j in j2_names:
-        idx = df_joueurs.index[df_joueurs['Nom']==j][0]+2
-        ws_joueurs.update_cell(idx, df_joueurs.columns.get_loc(f'elo_{type_match}')+1, int(df_joueurs.loc[df_joueurs['Nom']==j, f'elo_{type_match}'].values[0]+delta2))
-    return
+def add_match(date, type_match, joueurs, score, elo_avant, elo_apres):
+    row = [date, type_match, joueurs, score, elo_avant, elo_apres]
+    ws_historique.append_row(row)
 
-# --- Valider match ---
-if st.button("Valider match"):
-    if not equipe1 or not equipe2:
-        st.error("Sélectionner les deux équipes")
-    elif set(equipe1) & set(equipe2):
-        st.error("Un joueur est présent dans les deux équipes")
-    else:
-        appliquer_elo(equipe1, equipe2, type_match)
-        # Historique
-        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ws_historique.append_row([date, type_match, ",".join(equipe1), ",".join(equipe2), gagnant, "", ""])
-        st.success("Match enregistré")
+
+# --------------------------
+# STREAMLIT UI
+# --------------------------
+
+# Style personnalisé (même que admin.py)
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #0d1117;
+        color: #e6edf3;
+    }
+    h1, h2, h3 {
+        color: #00aaff !important;
+    }
+    .stButton button {
+        background-color: #00aaff !important;
+        color: white !important;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    .stDataFrame {
+        border: 2px solid #00aaff;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Logo (même emplacement que admin.py)
+logo_url = ""  # exemple: "https://tonsite.com/logo.png"
+if logo_url:
+    st.image(logo_url, width=200)
+
+st.title("🏸 Résultats Badminton ELO")
+
+# Charger joueurs
+df_joueurs = load_players()
+
+# Saisie d’un match
+st.header("➕ Enregistrer un match")
+
+with st.form("match_form"):
+    type_match = st.selectbox("Type de match", ["SH", "SD", "DH", "DD", "DM"])
+    joueurs = st.multiselect("Joueurs", df_joueurs["Nom"].tolist(), max_selections=4)
+    score = st.text_input("Score (ex: 21-15 / 19-21 / 21-18)")
+    submitted = st.form_submit_button("Enregistrer le match")
+
+    if submitted:
+        if len(joueurs) < 2:
+            st.error("⚠️ Sélectionne au moins 2 joueurs")
+        elif not score.strip():
+            st.error("⚠️ Le score est obligatoire")
+        else:
+            date = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # Placeholder pour les elos (à calculer selon ton système)
+            elo_avant = "TODO"
+            elo_apres = "TODO"
+            add_match(date, type_match, ", ".join(joueurs), score, elo_avant, elo_apres)
+            st.success("✅ Match enregistré !")
+
+# Historique
+st.header("📜 Historique des matchs")
+values = ws_historique.get_all_values()
+if len(values) > 1:
+    df_hist = pd.DataFrame(values[1:], columns=values[0])
+    st.dataframe(df_hist, use_container_width=True)
+else:
+    st.info("ℹ️ Aucun match enregistré")
