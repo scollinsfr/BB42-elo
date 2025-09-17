@@ -191,7 +191,9 @@ if len(values) > 1:
     # appliquer style uniquement sur la colonne Type de match
     if "Type de match" in df_hist.columns:
         styled = df_hist.style.applymap(color_match, subset=["Type de match"])
-        st.write(styled.to_html(), unsafe_allow_html=True)  # ✅ permet d'afficher le style
+        # empêcher le retour à la ligne
+        styled = styled.set_properties(**{"white-space": "nowrap"})
+        st.dataframe(styled, use_container_width=True)
     else:
         st.dataframe(df_hist, use_container_width=True)
 else:
