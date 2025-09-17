@@ -122,7 +122,7 @@ else:
 # PAGE
 # --------------------------
 
- st.image("logo.jpg", width=100)
+st.image("logo.jpg", width=100)
 
 st.title("🏸 Résultats Badminton ELO")
 
