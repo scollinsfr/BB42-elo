@@ -128,9 +128,8 @@ with st.form("match_form"):
                 type_match,
                 ", ".join(winners),
                 ", ".join(losers),
-                ", ".join(winners),
-                f"{elo_winners_avant}"
-                f"{new_winner_elo}"
+                "{elo_winners_avant}",
+                "{new_winner_elo}"
             )
 
             st.success("✅ Match enregistré et ELO mis à jour !")
