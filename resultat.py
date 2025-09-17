@@ -122,7 +122,8 @@ else:
 # PAGE
 # --------------------------
 
-logo_url = "http://badmintonstgalmier.free.fr/logo.jpg"  # Mets l'URL de ton logo si dispo
+# ✅ utilise https au lieu de http
+logo_url = "https://badmintonstgalmier.free.fr/logo.jpg"
 if logo_url:
     st.image(logo_url, width=200)
 
@@ -193,7 +194,7 @@ if len(values) > 1:
     # appliquer style uniquement sur la colonne Type de match
     if "Type de match" in df_hist.columns:
         styled = df_hist.style.applymap(color_match, subset=["Type de match"])
-        st.dataframe(styled, use_container_width=True)
+        st.write(styled.to_html(), unsafe_allow_html=True)  # ✅ permet d'afficher le style
     else:
         st.dataframe(df_hist, use_container_width=True)
 else:
