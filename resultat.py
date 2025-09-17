@@ -17,7 +17,6 @@ sheet = client.open("BadmintonElo")
 ws_joueurs = sheet.worksheet("Joueurs")
 ws_historique = sheet.worksheet("Historique")
 
-
 # --------------------------
 # FONCTIONS UTILITAIRES
 # --------------------------
@@ -53,16 +52,86 @@ def update_player_elo(player_name, col_elo, new_value):
     else:
         st.error(f"Impossible de trouver la ligne pour le joueur {player_name}.")
 
-def calculate_elo(winner_elo, loser_elo, k=32):
-    expected_win = 1 / (1 + 10 ** ((loser_elo - winner_elo) / 400))
-    new_winner_elo = round(winner_elo + k * (1 - expected_win))
-    new_loser_elo = round(loser_elo - k * (1 - expected_win))
-    return new_winner_elo, new_loser_elo
-
 def add_match(date, type_match, winners, losers, elo_avant, elo_apres):
     row = [date, type_match, winners, losers, elo_avant, elo_apres]
     ws_historique.append_row(row)
 
+# --------------------------
+# TABLES DE POINTS
+# --------------------------
+
+# Simples (SH, SD)
+simple_table = [
+    (0,49,20,14),
+    (50,99,17,13),
+    (100,199,14,12),
+    (200,299,11,10),
+    (300,399,9,7),
+    (400,599,7,4),
+    (600,799,5,1),
+    (800,999,4,0),
+    (1000,float('inf'),3,0)
+]
+
+# Doubles (DD, DH, DM)
+double_table = [
+    (0,49, 40,28, 40,28),
+    (50,99, 34,26, 46,30),
+    (100,199,28,24, 52,32),
+    (200,299,22,20, 64,36),
+    (300,399,18,14, 76,40),
+    (400,599,14,8, 86,44),
+    (600,799,10,2,106,48),
+    (800,999,8,0,122,52),
+    (1000,float('inf'),6,0,140,56)
+]
+
+# --------------------------
+# CALCUL DES POINTS
+# --------------------------
+
+def get_points_simple(winner_elo, loser_elo):
+    ecart = abs(winner_elo - loser_elo)
+    if winner_elo >= loser_elo:  # mieux classé gagne
+        for min_e, max_e, w_pts, l_pts in simple_table:
+            if min_e <= ecart <= max_e:
+                return w_pts, l_pts
+    else:  # moins bien classé gagne
+        for min_e, max_e, l_pts, w_pts in simple_table:
+            if min_e <= ecart <= max_e:
+                return w_pts, l_pts
+    return 20,14
+
+def get_points_double(elo_winners, elo_losers):
+    ecart = abs(elo_winners - elo_losers)
+    if elo_winners >= elo_losers:  # paire gagnante mieux classée
+        for min_e, max_e, w_pts, l_pts, _, _ in double_table:
+            if min_e <= ecart <= max_e:
+                return w_pts, l_pts
+    else:  # paire gagnante moins bien classée
+        for min_e, max_e, _, _, w_pts, l_pts in double_table:
+            if min_e <= ecart <= max_e:
+                return w_pts, l_pts
+    return 40,28
+
+def repartition_double(elo_j1, elo_j2, points):
+    ecart = abs(elo_j2 - elo_j1)
+    if ecart < 400:
+        return points*0.5, points*0.5
+    elif ecart < 500:
+        return points*0.54, points*0.46
+    elif ecart < 600:
+        return points*0.57, points*0.43
+    elif ecart < 700:
+        return points*0.61, points*0.39
+    elif ecart < 800:
+        return points*0.64, points*0.36
+    elif ecart < 900:
+        return points*0.68, points*0.32
+    elif ecart < 1000:
+        return points*0.71, points*0.29
+    else:
+        return points*0.75, points*0.25
 
 # --------------------------
 # THEME (toggle sombre / clair en haut)
@@ -72,57 +141,31 @@ dark = st.checkbox("🌙 Mode sombre", value=True)
 
 dark_css = """
 <style>
-[data-testid="stAppViewContainer"] {
-  background-color: #0d1117;
-  color: #e6edf3;
-}
-h1, h2, h3 {
-  color: #00aaff !important;
-}
-.stButton>button {
-  background-color: #00aaff !important;
-  color: white !important;
-  border-radius: 8px;
-  font-weight: 600;
-}
-a, p, span, label {
-  color: #e6edf3 !important;
-}
+[data-testid="stAppViewContainer"] {background-color:#0d1117;color:#e6edf3;}
+h1,h2,h3 {color:#00aaff !important;}
+.stButton>button {background-color:#00aaff !important;color:white !important;border-radius:8px;font-weight:600;}
+a,p,span,label {color:#e6edf3 !important;}
 </style>
 """
 
 light_css = """
 <style>
-[data-testid="stAppViewContainer"] {
-  background-color: #ffffff;
-  color: #111;
-}
-h1, h2, h3 {
-  color: #0077cc !important;
-}
-.stButton>button {
-  background-color: #0077cc !important;
-  color: white !important;
-  border-radius: 8px;
-  font-weight: 600;
-}
-a, p, span, label {
-  color: #111 !important;
-}
+[data-testid="stAppViewContainer"] {background-color:#ffffff;color:#111;}
+h1,h2,h3 {color:#0077cc !important;}
+.stButton>button {background-color:#0077cc !important;color:white !important;border-radius:8px;font-weight:600;}
+a,p,span,label {color:#111 !important;}
 </style>
 """
 
-if dark:
-    st.markdown(dark_css, unsafe_allow_html=True)
-else:
-    st.markdown(light_css, unsafe_allow_html=True)
-
+st.markdown(dark_css if dark else light_css, unsafe_allow_html=True)
 
 # --------------------------
 # PAGE
 # --------------------------
 
-st.image("logo.jpg", width=100)
+logo_url = ""  # mets l'URL du logo ici
+if logo_url:
+    st.image(logo_url, width=150)
 
 st.title("🏸 Résultats Badminton ELO")
 
@@ -138,7 +181,7 @@ with st.form("match_form"):
     submitted = st.form_submit_button("Enregistrer le match")
 
     if submitted:
-        if len(winners) < 1 or len(losers) < 1:
+        if len(winners)<1 or len(losers)<1:
             st.error("⚠️ Sélectionne au moins 1 joueur dans chaque équipe")
         elif set(winners) & set(losers):
             st.error("⚠️ Un même joueur ne peut pas être dans les deux équipes")
@@ -146,27 +189,41 @@ with st.form("match_form"):
             date = datetime.now().strftime("%Y-%m-%d %H:%M")
             col_elo = "elo_" + type_match
 
-            elo_winners_avant = df_joueurs.loc[df_joueurs["Nom"].isin(winners), col_elo].mean()
-            elo_losers_avant = df_joueurs.loc[df_joueurs["Nom"].isin(losers), col_elo].mean()
+            elo_winners = df_joueurs.loc[df_joueurs["Nom"].isin(winners), col_elo].mean()
+            elo_losers = df_joueurs.loc[df_joueurs["Nom"].isin(losers), col_elo].mean()
 
-            new_winner_elo, new_loser_elo = calculate_elo(elo_winners_avant, elo_losers_avant)
+            if type_match in ["SH","SD"]:
+                pts_w, pts_l = get_points_simple(elo_winners, elo_losers)
+                for p in winners:
+                    new_elo = df_joueurs.loc[df_joueurs["Nom"]==p,col_elo].values[0]+pts_w
+                    update_player_elo(p,col_elo,new_elo)
+                for p in losers:
+                    new_elo = df_joueurs.loc[df_joueurs["Nom"]==p,col_elo].values[0]-pts_l
+                    update_player_elo(p,col_elo,new_elo)
+            else:  # doubles
+                pts_w, pts_l = get_points_double(elo_winners, elo_losers)
+                # répartition par joueur
+                j1, j2 = winners
+                j3, j4 = losers
+                elo_j1 = df_joueurs.loc[df_joueurs["Nom"]==j1,col_elo].values[0]
+                elo_j2 = df_joueurs.loc[df_joueurs["Nom"]==j2,col_elo].values[0]
+                elo_j3 = df_joueurs.loc[df_joueurs["Nom"]==j3,col_elo].values[0]
+                elo_j4 = df_joueurs.loc[df_joueurs["Nom"]==j4,col_elo].values[0]
 
-            for p in winners:
-                update_player_elo(p, col_elo, new_winner_elo)
-            for p in losers:
-                update_player_elo(p, col_elo, new_loser_elo)
+                # paire gagnante
+                pts_j1, pts_j2 = repartition_double(min(elo_j1,elo_j2), max(elo_j1,elo_j2), pts_w)
+                update_player_elo(j1,col_elo,elo_j1+pts_j1)
+                update_player_elo(j2,col_elo,elo_j2+pts_j2)
+                # paire perdante
+                pts_j3, pts_j4 = repartition_double(min(elo_j3,elo_j4), max(elo_j3,elo_j4), pts_l)
+                update_player_elo(j3,col_elo,elo_j3-pts_j3)
+                update_player_elo(j4,col_elo,elo_j4-pts_j4)
 
-            add_match(
-                date,
-                type_match,
-                ", ".join(winners),
-                ", ".join(losers),
-                f"{int(elo_winners_avant)}/{int(elo_losers_avant)}",
-                f"{new_winner_elo}/{new_loser_elo}"
-            )
+            add_match(date,type_match,", ".join(winners),", ".join(losers),
+                      f"{elo_winners}/{elo_losers}",
+                      f"{elo_winners+pts_w}/{elo_losers-pts_l}" if type_match in ["SH","SD"] else f"{elo_winners}/{elo_losers}")
 
             st.success("✅ Match enregistré et ELO mis à jour !")
-
 
 # --------------------------
 # HISTORIQUE AVEC COULEURS
@@ -174,27 +231,20 @@ with st.form("match_form"):
 
 st.header("📜 Historique des matchs")
 values = ws_historique.get_all_values()
-if len(values) > 1:
+if len(values)>1:
     df_hist = pd.DataFrame(values[1:], columns=values[0])
-
-    # fonction de coloration selon type
     def color_match(val):
-        colors = {
-            "SH": "background-color: #3399ff; color: white;",   # bleu
-            "DH": "background-color: #33cc33; color: white;",   # vert
-            "SD": "background-color: #ff66b2; color: white;",   # rose
-            "DD": "background-color: #ff9933; color: white;",   # orange
-            "DM": "background-color: #9933ff; color: white;",   # violet
-        }
-        return colors.get(val, "")
-
-    # appliquer style uniquement sur la colonne Type de match
+        colors = {"SH":"background-color:#3399ff;color:white;",
+                  "DH":"background-color:#33cc33;color:white;",
+                  "SD":"background-color:#ff66b2;color:white;",
+                  "DD":"background-color:#ff9933;color:white;",
+                  "DM":"background-color:#9933ff;color:white;"}
+        return colors.get(val,"")
     if "Type de match" in df_hist.columns:
         styled = df_hist.style.applymap(color_match, subset=["Type de match"])
-        # empêcher le retour à la ligne
-        styled = styled.set_properties(**{"white-space": "nowrap"})
-        st.dataframe(styled, use_container_width=True)
+        styled = styled.set_properties(**{"white-space":"nowrap"})
+        st.dataframe(styled,use_container_width=True)
     else:
-        st.dataframe(df_hist, use_container_width=True)
+        st.dataframe(df_hist,use_container_width=True)
 else:
     st.info("ℹ️ Aucun match enregistré")
