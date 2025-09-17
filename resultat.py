@@ -24,33 +24,28 @@ ws_historique = sheet.worksheet("Historique")
 
 def load_players():
     values = ws_joueurs.get_all_values()
-    # Si feuille vide, retourne df vide avec colonnes attendues
     if not values or len(values) == 0:
         return pd.DataFrame(columns=["Nom", "Sexe", "elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"])
     df = pd.DataFrame(values[1:], columns=values[0])
-    # Si certaines colonnes ELO manquent, on les crée
     for col in ["elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"]:
         if col not in df.columns:
             df[col] = 1000
-    # Conversion en int (sécurisé)
-    for col in ["elo_SH", "elo_SD", "elo_DH", "elo_DD", "elo_DM"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(1000).astype(int)
     return df
 
 def update_player_elo(player_name, col_elo, new_value):
-    """Met à jour uniquement l'ELO du joueur donné dans la feuille Google Sheets"""
     values = ws_joueurs.get_all_values()
     if not values or len(values) < 1:
         return
     headers = values[0]
     try:
-        col_index = headers.index(col_elo) + 1  # 1-based
+        col_index = headers.index(col_elo) + 1
     except ValueError:
         st.error(f"Colonne {col_elo} introuvable dans la feuille Joueurs.")
         return
     row_index = None
-    for i, row in enumerate(values[1:], start=2):  # start=2 car ligne 1 = header
-        if len(row) > 0 and row[0] == player_name:  # colonne "Nom" en position 0
+    for i, row in enumerate(values[1:], start=2):
+        if len(row) > 0 and row[0] == player_name:
             row_index = i
             break
     if row_index:
@@ -70,48 +65,26 @@ def add_match(date, type_match, winners, losers, elo_avant, elo_apres):
 
 
 # --------------------------
-# THEME (toggle sombre / clair)
+# THEME (toggle sombre / clair en haut)
 # --------------------------
 
-# Place le toggle dans la barre latérale pour qu'il soit visible rapidement
-dark = st.sidebar.checkbox("🌙 Mode sombre", value=True)
+dark = st.checkbox("🌙 Mode sombre", value=True)
 
 dark_css = """
 <style>
-/* fond principal */
 [data-testid="stAppViewContainer"] {
   background-color: #0d1117;
-}
-
-/* conteneur du contenu */
-[data-testid="stAppViewContainer"] .main {
   color: #e6edf3;
 }
-
-/* sidebar */
-[data-testid="stSidebar"] {
-  background-color: #071018;
-}
-
-/* headers */
 h1, h2, h3 {
   color: #00aaff !important;
 }
-
-/* boutons */
 .stButton>button {
   background-color: #00aaff !important;
   color: white !important;
   border-radius: 8px;
   font-weight: 600;
 }
-
-/* tableau */
-.stDataFrame, .element-container {
-  border: 2px solid #00aaff !important;
-}
-
-/* liens, small text */
 a, p, span, label {
   color: #e6edf3 !important;
 }
@@ -122,9 +95,7 @@ light_css = """
 <style>
 [data-testid="stAppViewContainer"] {
   background-color: #ffffff;
-}
-[data-testid="stSidebar"] {
-  background-color: #f6faff;
+  color: #111;
 }
 h1, h2, h3 {
   color: #0077cc !important;
@@ -135,16 +106,12 @@ h1, h2, h3 {
   border-radius: 8px;
   font-weight: 600;
 }
-.stDataFrame, .element-container {
-  border: 2px solid #0077cc !important;
-}
 a, p, span, label {
   color: #111 !important;
 }
 </style>
 """
 
-# Appliquer le CSS correspondant
 if dark:
     st.markdown(dark_css, unsafe_allow_html=True)
 else:
@@ -155,22 +122,18 @@ else:
 # PAGE
 # --------------------------
 
-# Logo (emplacement)
-logo_url = ""  # mets ici ton URL de logo si tu veux
+logo_url = "http://badmintonstgalmier.free.fr/logo.jpg"  # Mets l'URL de ton logo si dispo
 if logo_url:
     st.image(logo_url, width=200)
 
 st.title("🏸 Résultats Badminton ELO")
 
-# Charger joueurs
 df_joueurs = load_players()
 
-# Formulaire de saisie
 st.header("➕ Enregistrer un match")
 
 with st.form("match_form"):
     type_match = st.selectbox("Type de match", ["SH", "SD", "DH", "DD", "DM"])
-    # Sélections (max 2 pour doubles)
     noms = df_joueurs["Nom"].tolist() if not df_joueurs.empty else []
     winners = st.multiselect("Équipe gagnante", noms, max_selections=2)
     losers = st.multiselect("Équipe perdante", noms, max_selections=2)
@@ -183,24 +146,18 @@ with st.form("match_form"):
             st.error("⚠️ Un même joueur ne peut pas être dans les deux équipes")
         else:
             date = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-            # colonne ELO
             col_elo = "elo_" + type_match
 
-            # moyenne des ELO avant (si joueur absent, prise en compte)
             elo_winners_avant = df_joueurs.loc[df_joueurs["Nom"].isin(winners), col_elo].mean()
             elo_losers_avant = df_joueurs.loc[df_joueurs["Nom"].isin(losers), col_elo].mean()
 
-            # calcul nouveaux ELO
             new_winner_elo, new_loser_elo = calculate_elo(elo_winners_avant, elo_losers_avant)
 
-            # mise à jour ciblée des joueurs
             for p in winners:
                 update_player_elo(p, col_elo, new_winner_elo)
             for p in losers:
                 update_player_elo(p, col_elo, new_loser_elo)
 
-            # enregistrement historique (elo avant/après séparés pour audit)
             add_match(
                 date,
                 type_match,
@@ -213,11 +170,31 @@ with st.form("match_form"):
             st.success("✅ Match enregistré et ELO mis à jour !")
 
 
-# Historique
+# --------------------------
+# HISTORIQUE AVEC COULEURS
+# --------------------------
+
 st.header("📜 Historique des matchs")
 values = ws_historique.get_all_values()
 if len(values) > 1:
     df_hist = pd.DataFrame(values[1:], columns=values[0])
-    st.dataframe(df_hist, use_container_width=True)
+
+    # fonction de coloration selon type
+    def color_match(val):
+        colors = {
+            "SH": "background-color: #3399ff; color: white;",   # bleu
+            "DH": "background-color: #33cc33; color: white;",   # vert
+            "SD": "background-color: #ff66b2; color: white;",   # rose
+            "DD": "background-color: #ff9933; color: white;",   # orange
+            "DM": "background-color: #9933ff; color: white;",   # violet
+        }
+        return colors.get(val, "")
+
+    # appliquer style uniquement sur la colonne Type de match
+    if "Type de match" in df_hist.columns:
+        styled = df_hist.style.applymap(color_match, subset=["Type de match"])
+        st.dataframe(styled, use_container_width=True)
+    else:
+        st.dataframe(df_hist, use_container_width=True)
 else:
     st.info("ℹ️ Aucun match enregistré")
