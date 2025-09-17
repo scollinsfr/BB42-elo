@@ -33,13 +33,12 @@ def update_player_elo(player_name, col_elo, new_value):
     """Met à jour uniquement l'ELO du joueur donné dans la feuille Google Sheets"""
     values = ws_joueurs.get_all_values()
     headers = values[0]
-    col_index = headers.index(col_elo) + 1  # colonne correspondante (1-based)
+    col_index = headers.index(col_elo) + 1
     row_index = None
-    for i, row in enumerate(values[1:], start=2):  # start=2 car ligne 1 = en-tête
-        if row[0] == player_name:  # colonne "Nom"
+    for i, row in enumerate(values[1:], start=2):
+        if row[0] == player_name:
             row_index = i
             break
-
     if row_index:
         ws_joueurs.update_cell(row_index, col_index, int(new_value))
 
@@ -55,32 +54,64 @@ def add_match(date, type_match, winners, losers, elo_avant, elo_apres):
 
 
 # --------------------------
-# STYLE STREAMLIT
+# MODE SOMBRE
 # --------------------------
 
-st.markdown(
-    """
-    <style>
-    .main {
-        background-color: #0d1117;
-        color: #e6edf3;
-    }
-    h1, h2, h3 {
-        color: #00aaff !important;
-    }
-    .stButton button {
-        background-color: #00aaff !important;
-        color: white !important;
-        border-radius: 8px;
-        font-weight: bold;
-    }
-    .stDataFrame {
-        border: 2px solid #00aaff;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+dark_mode = st.toggle("🌙 Mode sombre", value=True)
+
+if dark_mode:
+    st.markdown(
+        """
+        <style>
+        .main {
+            background-color: #0d1117;
+            color: #e6edf3;
+        }
+        h1, h2, h3 {
+            color: #00aaff !important;
+        }
+        .stButton button {
+            background-color: #00aaff !important;
+            color: white !important;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .stDataFrame {
+            border: 2px solid #00aaff;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        """
+        <style>
+        .main {
+            background-color: white;
+            color: black;
+        }
+        h1, h2, h3 {
+            color: #0077cc !important;
+        }
+        .stButton button {
+            background-color: #0077cc !important;
+            color: white !important;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .stDataFrame {
+            border: 2px solid #0077cc;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# --------------------------
+# PAGE
+# --------------------------
 
 # Logo
 logo_url = ""  # exemple: "https://tonsite.com/logo.png"
@@ -88,11 +119,6 @@ if logo_url:
     st.image(logo_url, width=200)
 
 st.title("🏸 Résultats Badminton ELO")
-
-
-# --------------------------
-# FORMULAIRE MATCH
-# --------------------------
 
 df_joueurs = load_players()
 
@@ -109,24 +135,18 @@ with st.form("match_form"):
             st.error("⚠️ Sélectionne au moins 1 joueur dans chaque équipe")
         else:
             date = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-            # Identifier la colonne ELO
             col_elo = "elo_" + type_match
 
-            # Moyenne des ELO avant
             elo_winners_avant = df_joueurs.loc[df_joueurs["Nom"].isin(winners), col_elo].mean()
             elo_losers_avant = df_joueurs.loc[df_joueurs["Nom"].isin(losers), col_elo].mean()
 
-            # Calcul nouveaux ELO
             new_winner_elo, new_loser_elo = calculate_elo(elo_winners_avant, elo_losers_avant)
 
-            # Mise à jour ciblée des joueurs
             for p in winners:
                 update_player_elo(p, col_elo, new_winner_elo)
             for p in losers:
                 update_player_elo(p, col_elo, new_loser_elo)
 
-            # Enregistrer match dans l’historique
             add_match(
                 date,
                 type_match,
@@ -137,11 +157,6 @@ with st.form("match_form"):
             )
 
             st.success("✅ Match enregistré et ELO mis à jour !")
-
-
-# --------------------------
-# HISTORIQUE
-# --------------------------
 
 st.header("📜 Historique des matchs")
 values = ws_historique.get_all_values()
