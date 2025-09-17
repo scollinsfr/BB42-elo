@@ -122,10 +122,7 @@ else:
 # PAGE
 # --------------------------
 
-# ✅ utilise https au lieu de http
-logo_url = "https://badmintonstgalmier.free.fr/logo.jpg"
-if logo_url:
-    st.image(logo_url, width=200)
+ st.image("logo.jpg", width=100)
 
 st.title("🏸 Résultats Badminton ELO")
 
