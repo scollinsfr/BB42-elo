@@ -17,7 +17,11 @@ sheet = client.open("BadmintonElo")
 ws_joueurs = sheet.worksheet("Joueurs")
 ws_historique = sheet.worksheet("Historique")
 
-# --- Charger joueurs ---
+
+# --------------------------
+# FONCTIONS UTILITAIRES
+# --------------------------
+
 def load_players():
     values = ws_joueurs.get_all_values()
     df = pd.DataFrame(values[1:], columns=values[0])
@@ -25,13 +29,20 @@ def load_players():
         df[col] = df[col].astype(int)
     return df
 
-def save_players(df):
-    ws_joueurs.clear()
-    ws_joueurs.append_row(df.columns.tolist())
-    for row in df.values.tolist():
-        ws_joueurs.append_row(row)
+def update_player_elo(player_name, col_elo, new_value):
+    """Met à jour uniquement l'ELO du joueur donné dans la feuille Google Sheets"""
+    values = ws_joueurs.get_all_values()
+    headers = values[0]
+    col_index = headers.index(col_elo) + 1  # colonne correspondante (1-based)
+    row_index = None
+    for i, row in enumerate(values[1:], start=2):  # start=2 car ligne 1 = en-tête
+        if row[0] == player_name:  # colonne "Nom"
+            row_index = i
+            break
 
-# --- Fonctions ELO ---
+    if row_index:
+        ws_joueurs.update_cell(row_index, col_index, int(new_value))
+
 def calculate_elo(winner_elo, loser_elo, k=32):
     expected_win = 1 / (1 + 10 ** ((loser_elo - winner_elo) / 400))
     new_winner_elo = round(winner_elo + k * (1 - expected_win))
@@ -42,11 +53,11 @@ def add_match(date, type_match, winners, losers, elo_avant, elo_apres):
     row = [date, type_match, winners, losers, elo_avant, elo_apres]
     ws_historique.append_row(row)
 
+
 # --------------------------
-# STREAMLIT UI
+# STYLE STREAMLIT
 # --------------------------
 
-# Style personnalisé (même que admin.py)
 st.markdown(
     """
     <style>
@@ -78,10 +89,13 @@ if logo_url:
 
 st.title("🏸 Résultats Badminton ELO")
 
-# Charger joueurs
+
+# --------------------------
+# FORMULAIRE MATCH
+# --------------------------
+
 df_joueurs = load_players()
 
-# Saisie match
 st.header("➕ Enregistrer un match")
 
 with st.form("match_form"):
@@ -106,35 +120,29 @@ with st.form("match_form"):
             # Calcul nouveaux ELO
             new_winner_elo, new_loser_elo = calculate_elo(elo_winners_avant, elo_losers_avant)
 
-            # Mise à jour des joueurs
+            # Mise à jour ciblée des joueurs
             for p in winners:
-                df_joueurs.loc[df_joueurs["Nom"] == p, col_elo] = new_winner_elo
+                update_player_elo(p, col_elo, new_winner_elo)
             for p in losers:
-                df_joueurs.loc[df_joueurs["Nom"] == p, col_elo] = new_loser_elo
-
-            save_players(df_joueurs)
+                update_player_elo(p, col_elo, new_loser_elo)
 
             # Enregistrer match dans l’historique
-#            add_match(
-#                date,
-#                type_match,
-#                ", ".join(winners),
-#                ", ".join(losers),
-#                f"{int(elo_winners_avant)}/{int(elo_losers_avant)}",
-#                f"{new_winner_elo}/{new_loser_elo}"
-#           )
             add_match(
                 date,
                 type_match,
                 ", ".join(winners),
                 ", ".join(losers),
-                "{elo_winners_avant}",
-                "{new_winner_elo}"
+                f"{int(elo_winners_avant)}/{int(elo_losers_avant)}",
+                f"{new_winner_elo}/{new_loser_elo}"
             )
 
             st.success("✅ Match enregistré et ELO mis à jour !")
 
-# Historique
+
+# --------------------------
+# HISTORIQUE
+# --------------------------
+
 st.header("📜 Historique des matchs")
 values = ws_historique.get_all_values()
 if len(values) > 1:
